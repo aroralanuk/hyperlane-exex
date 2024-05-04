@@ -1,0 +1,18 @@
+[package]
+name = "hyperlane-exex"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+reth_node_api = { git = "https://github.com/paradigmxyz/reth", package = "reth-node-api" }
+reth_exex = { git = "https://github.com/paradigmxyz/reth", package = "reth-exex" }
+reth_node_ethereum = { git = "https://github.com/paradigmxyz/reth", package = "reth-node-ethereum" }
+reth_primitives = { git = "https://github.com/paradigmxyz/reth", package = "reth-primitives" }
+reth_provider = { git = "https://github.com/paradigmxyz/reth", package = "reth-provider" }
+reth_tracing = { git = "https://github.com/paradigmxyz/reth", package = "reth-tracing" }
+reth = { git = "https://github.com/paradigmxyz/reth", package = "reth" }
+futures = "0.3.30"
+eyre = "0.6.12"
+
