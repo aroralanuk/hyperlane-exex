@@ -15,4 +15,11 @@ reth_tracing = { git = "https://github.com/paradigmxyz/reth", package = "reth-tr
 reth = { git = "https://github.com/paradigmxyz/reth", package = "reth" }
 futures = "0.3.30"
 eyre = "0.6.12"
+alloy-sol-types = { version = "0.7.2", features = ["json"] }
+# primitive-types = "0.12.1"
 
+# hyperlane_ethereum = {git = "https://github.com/hyperlane-xyz/hyperlane-monorepo/", package = "hyperlane-ethereum" }
+secp256k1 = { version = "0.28", default-features = false, features = [
+    "global-context",
+    "recovery",
+] }
