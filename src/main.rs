@@ -8,6 +8,7 @@ use reth_provider::Chain;
 use reth_primitives::{Log, SealedBlockWithSenders, TransactionSigned, keccak256};
 use ethers::{core::k256::ecdsa::SigningKey, signers::LocalWallet};
 use alloy_sol_types::{sol, SolEventInterface};
+use rusoto_core::Region;
 use Mailbox::MailboxEvents;
 use hyperlane_core::{HyperlaneSignerExt, Signable, SignedType, H256};
 use hyperlane_ethereum::Signers::Local;
@@ -16,6 +17,8 @@ use serde::{Deserialize, Serialize};
 use crate::Mailbox::DispatchId;
 sol!(Mailbox, "mailbox_abi.json");
 
+mod s3_storage;
+use s3_storage::S3Storage;
 
 #[derive(Copy, Clone, Eq, PartialEq, Serialize, Deserialize, Debug)]
 pub struct MessageIdCheckpoint {
@@ -29,6 +32,10 @@ impl Signable for MessageIdCheckpoint {
     fn signing_hash(&self) -> H256 {
         self.message_id.into()
     }
+}
+
+fn checkpoint_key(message_id: [u8; 32]) -> String {
+    format!("checkpoint_{}.json", hex::encode(message_id))
 }
 
 
@@ -68,9 +75,20 @@ async fn exex<Node: FullNodeComponents>(mut ctx: ExExContext<Node>) -> eyre::Res
                                     ethers::core::k256::SecretKey::from_be_bytes(&[0; 32]).unwrap(),
                                 ),
                             ));
-                            let signed_checkpoint = signer.sign(MessageIdCheckpoint { message_id: messageId.into() }).await.unwrap();
+                            let checkpoint = MessageIdCheckpoint { message_id: messageId.into() };
+                            let signed_checkpoint = signer.sign(checkpoint).await.unwrap();
                             let serialized_checkpoint = serde_json::to_string_pretty(&signed_checkpoint)?;
+                            
+                            let s3_instance: S3Storage = S3Storage {
+                                bucket: "hyperlane-validator-signatures-ethereum".to_string(),
+                                region: Region::UsEast1,
+                                authenticated_client: Default::default(),  // use your own authenticated client here
+                            };
+
                             // write to bucket
+                            s3_instance.write_to_bucket(checkpoint_key(checkpoint.message_id),  &serialized_checkpoint).await.map_err(|e| eyre::eyre!("Failed to write to S3: {:?}", e))?;
+
+                            info!("Added checkpoint with messageId {} to S3 bucket", hex::encode(messageId));
                             dispatches += 1;
                         }
                         _ => continue,
