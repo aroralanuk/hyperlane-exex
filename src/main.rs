@@ -1,18 +1,22 @@
+use eyre::Result;
 use futures::Future;
+use std::{env, sync::Arc};
 
+use alloy_sol_types::{sol, SolEventInterface};
+use ethers::{
+    core::k256::{ecdsa::SigningKey, SecretKey},
+    signers::LocalWallet,
+};
+use hyperlane_core::HyperlaneSignerExt;
+use hyperlane_ethereum::Signers::Local;
 use reth_exex::{ExExContext, ExExEvent, ExExNotification};
 use reth_node_api::FullNodeComponents;
 use reth_node_ethereum::EthereumNode;
-use reth_tracing::tracing::info;
+use reth_primitives::{Log, SealedBlockWithSenders, TransactionSigned};
 use reth_provider::Chain;
-use reth_primitives::{Log, SealedBlockWithSenders, TransactionSigned, keccak256};
-use ethers::{core::k256::ecdsa::SigningKey, signers::LocalWallet};
-use alloy_sol_types::{sol, SolEventInterface};
+use reth_tracing::tracing::info;
 use rusoto_core::Region;
 use Mailbox::MailboxEvents;
-use hyperlane_core::{HyperlaneSignerExt, Signable, SignedType, H256};
-use hyperlane_ethereum::Signers::Local;
-use serde::{Deserialize, Serialize};
 
 use crate::Mailbox::DispatchId;
 sol!(Mailbox, "mailbox_abi.json");
@@ -20,24 +24,8 @@ sol!(Mailbox, "mailbox_abi.json");
 mod s3_storage;
 use s3_storage::S3Storage;
 
-#[derive(Copy, Clone, Eq, PartialEq, Serialize, Deserialize, Debug)]
-pub struct MessageIdCheckpoint {
-    pub message_id: [u8; 32],
-}
-
-
-pub type SignedMessageIdCheckpoint = SignedType<MessageIdCheckpoint>;
-
-impl Signable for MessageIdCheckpoint {
-    fn signing_hash(&self) -> H256 {
-        self.message_id.into()
-    }
-}
-
-fn checkpoint_key(message_id: [u8; 32]) -> String {
-    format!("checkpoint_{}.json", hex::encode(message_id))
-}
-
+mod checkpoint;
+use checkpoint::{checkpoint_key, MessageIdCheckpoint};
 
 /// The initialization logic of the ExEx is just an async function.
 ///
@@ -53,7 +41,26 @@ async fn exex_init<Node: FullNodeComponents>(
 ///
 /// This ExEx just prints out whenever either a new chain of blocks being added, or a chain of
 /// blocks being re-orged. After processing the chain, emits an [ExExEvent::FinishedHeight] event.
+/// 
+/// In the case of hyperlane-exex, the ExEx filters out the [MailboxEvents::DispatchId] events from
+/// the chain, signs them with a private key, and writes them to an S3 bucket. In the case of reorgs or reverts, we
+/// delete the checkpoints from the S3 bucket in the [delete_checkpoints_from_s3] function.
 async fn exex<Node: FullNodeComponents>(mut ctx: ExExContext<Node>) -> eyre::Result<()> {
+    // Get the secret key from the environment variable "PRIVATE_KEY"
+    let secret_key_str = env::var("PRIVATE_KEY").expect("PRIVATE_KEY environment variable not set");
+
+    let secret_key =
+        SecretKey::from_be_bytes(secret_key_str.as_bytes()).expect("Invalid secret key bytes");
+
+    // Create the signer
+    let signer = Local(LocalWallet::from(SigningKey::from(secret_key)));
+
+    let s3_instance: S3Storage = S3Storage {
+        bucket: "hyperlane-validator-signatures-ethereum".to_string(), // pick your bucket name here
+        region: Region::UsEast1,                                       // pick region
+        authenticated_client: Default::default(), // use your own authenticated client here
+    };
+
     while let Some(notification) = ctx.notifications.recv().await {
         match &notification {
             ExExNotification::ChainCommitted { new } => {
@@ -64,59 +71,92 @@ async fn exex<Node: FullNodeComponents>(mut ctx: ExExContext<Node>) -> eyre::Res
 
                 let mut dispatches = 0;
 
-                for (block, tx, log, event) in events {
+                for (block, _, _, event) in events {
                     match event {
-                        MailboxEvents::DispatchId(DispatchId {
-                            messageId
-                        }) => {
-                            let key = SigningKey::from_bytes(&[0; 32]).unwrap();
-                            let signer = Local(LocalWallet::from(
-                                ethers::core::k256::ecdsa::SigningKey::from(
-                                    ethers::core::k256::SecretKey::from_be_bytes(&[0; 32]).unwrap(),
-                                ),
-                            ));
-                            let checkpoint = MessageIdCheckpoint { message_id: messageId.into() };
-                            let signed_checkpoint = signer.sign(checkpoint).await.unwrap();
-                            let serialized_checkpoint = serde_json::to_string_pretty(&signed_checkpoint)?;
-                            
-                            let s3_instance: S3Storage = S3Storage {
-                                bucket: "hyperlane-validator-signatures-ethereum".to_string(),
-                                region: Region::UsEast1,
-                                authenticated_client: Default::default(),  // use your own authenticated client here
+                        MailboxEvents::DispatchId(DispatchId { messageId }) => {
+                            let checkpoint = MessageIdCheckpoint {
+                                message_id: messageId.into(),
                             };
+                            // ecdsa sign the checkpoint
+                            let signed_checkpoint = signer.sign(checkpoint).await.unwrap();
+                            let serialized_checkpoint =
+                                serde_json::to_string_pretty(&signed_checkpoint)?;
 
                             // write to bucket
-                            s3_instance.write_to_bucket(checkpoint_key(checkpoint.message_id),  &serialized_checkpoint).await.map_err(|e| eyre::eyre!("Failed to write to S3: {:?}", e))?;
+                            s3_instance
+                                .write_to_bucket(
+                                    checkpoint_key(checkpoint.message_id),
+                                    &serialized_checkpoint,
+                                )
+                                .await
+                                .map_err(|e| eyre::eyre!("Failed to write to S3: {:?}", e))?;
 
-                            info!("Added checkpoint with messageId {} to S3 bucket", hex::encode(messageId));
+                            info!(
+                                "Added checkpoint #{} with messageId {} to S3 bucket for block #{}",
+                                dispatches, hex::encode(messageId), block.number
+                            );
                             dispatches += 1;
                         }
                         _ => continue,
                     }
-                };
-
+                }
+                // Send a finished height event, signaling the node that we don't need any blocks below
+                // this height anymore
+                ctx.events
+                    .send(ExExEvent::FinishedHeight(committed_chain.tip().number))?;
             }
             ExExNotification::ChainReorged { old, new } => {
-                info!(from_chain = ?old.range(), to_chain = ?new.range(), "Received reorg");
+                let reverted_chain = notification.reverted_chain().unwrap();
+                info!(reverted_chain = ?old.range(), to_chain = ?new.range(), "Received reorg");
+
+                delete_checkpoints_from_s3(&s3_instance, &reverted_chain).await?;
             }
             ExExNotification::ChainReverted { old } => {
+                let reverted_chain = notification.reverted_chain().unwrap();
                 info!(reverted_chain = ?old.range(), "Received revert");
+
+                delete_checkpoints_from_s3(&s3_instance, &reverted_chain).await?;
             }
         };
+    }
 
-        if let Some(committed_chain) = notification.committed_chain() {
-            ctx.events.send(ExExEvent::FinishedHeight(committed_chain.tip().number))?;
+    Ok(())
+}
+
+async fn delete_checkpoints_from_s3(s3_instance: &S3Storage, chain: &Arc<Chain>) -> Result<()> {
+    let events = decode_chain_into_events(chain);
+
+    for (block, _, _, event) in events {
+        if let MailboxEvents::DispatchId(DispatchId { messageId }) = event {
+            let checkpoint = MessageIdCheckpoint {
+                message_id: messageId.into(),
+            };
+            // delete from bucket
+            s3_instance
+                .delete_from_bucket(checkpoint_key(checkpoint.message_id))
+                .await
+                .map_err(|e| eyre::eyre!("Failed to delete from S3: {:?}", e))?;
+            info!(
+                "Deleted checkpoint with messageId {} from S3 bucket for block #{}",
+                hex::encode(messageId), block.number
+            );
         }
     }
     Ok(())
 }
 
 /// Decode chain of blocks into a flattened list of receipt logs, and filter only
-/// [L1StandardBridgeEvents].
+/// [MailboxEvents].
 fn decode_chain_into_events(
     chain: &Chain,
-) -> impl Iterator<Item = (&SealedBlockWithSenders, &TransactionSigned, &Log, MailboxEvents)>
-{
+) -> impl Iterator<
+    Item = (
+        &SealedBlockWithSenders,
+        &TransactionSigned,
+        &Log,
+        MailboxEvents,
+    ),
+> {
     chain
         // Get all blocks and receipts
         .blocks_and_receipts()
