@@ -14,12 +14,26 @@ reth_provider = { git = "https://github.com/paradigmxyz/reth", package = "reth-p
 reth_tracing = { git = "https://github.com/paradigmxyz/reth", package = "reth-tracing" }
 reth = { git = "https://github.com/paradigmxyz/reth", package = "reth" }
 futures = "0.3.30"
-eyre = "0.6.12"
+eyre = "0.6.8"
 alloy-sol-types = { version = "0.7.2", features = ["json"] }
-# primitive-types = "0.12.1"
+primitive-types = "0.12.1"
 
-# hyperlane_ethereum = {git = "https://github.com/hyperlane-xyz/hyperlane-monorepo/", package = "hyperlane-ethereum" }
-secp256k1 = { version = "0.28", default-features = false, features = [
-    "global-context",
-    "recovery",
-] }
+hyperlane_ethereum = {git = "https://github.com/hyperlane-xyz/hyperlane-monorepo/", package = "hyperlane-ethereum" }
+hyperlane_core = {git = "https://github.com/hyperlane-xyz/hyperlane-monorepo/", package = "hyperlane-core" }
+# secp256k1 = { version = "0.28", default-features = false, features = [
+#     "global-context",
+#     "recovery",
+# ] }
+serde_json = "1.0.116"
+ethers = { git = "https://github.com/hyperlane-xyz/ethers-rs", tag = "2024-04-25" }
+
+# [workspace.dependencies.ethers]
+# features = []
+
+# tag = "2024-04-25"
+
+# [workspace.dependencies.ethers-signers]
+# features = ["aws"]
+# git = "https://github.com/hyperlane-xyz/ethers-rs"
+# tag = "2024-04-25"
+

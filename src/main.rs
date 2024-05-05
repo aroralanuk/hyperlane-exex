@@ -1,21 +1,35 @@
 use futures::Future;
+
 use reth_exex::{ExExContext, ExExEvent, ExExNotification};
 use reth_node_api::FullNodeComponents;
 use reth_node_ethereum::EthereumNode;
 use reth_tracing::tracing::info;
 use reth_provider::Chain;
 use reth_primitives::{Log, SealedBlockWithSenders, TransactionSigned, keccak256};
-
+use ethers::{core::k256::ecdsa::SigningKey, signers::LocalWallet};
 use alloy_sol_types::{sol, SolEventInterface};
 use Mailbox::MailboxEvents;
+use hyperlane_core::{HyperlaneSignerExt, Signable, SignedType, H256};
+use hyperlane_ethereum::Signers::Local;
+use serde::{Deserialize, Serialize};
 
 use crate::Mailbox::DispatchId;
 sol!(Mailbox, "mailbox_abi.json");
 
-use secp256k1::{
-    ecdsa::RecoverableSignature,
-    SecretKey, SECP256K1
-};
+
+#[derive(Copy, Clone, Eq, PartialEq, Serialize, Deserialize, Debug)]
+pub struct MessageIdCheckpoint {
+    pub message_id: [u8; 32],
+}
+
+
+pub type SignedMessageIdCheckpoint = SignedType<MessageIdCheckpoint>;
+
+impl Signable for MessageIdCheckpoint {
+    fn signing_hash(&self) -> H256 {
+        self.message_id.into()
+    }
+}
 
 
 /// The initialization logic of the ExEx is just an async function.
@@ -48,15 +62,15 @@ async fn exex<Node: FullNodeComponents>(mut ctx: ExExContext<Node>) -> eyre::Res
                         MailboxEvents::DispatchId(DispatchId {
                             messageId
                         }) => {
-                            dispatches += 1;
-                            
-                            let secret_key = SecretKey::from_slice(&[0u8; 32]).unwrap();
-                            let signature: RecoverableSignature = SECP256K1.sign_ecdsa_recoverable(
-                                &secp256k1::Message::from_digest(keccak256(&messageId).0),
-                                &secret_key,
-                            );
-                            // write signature to bucket
-
+                            let key = SigningKey::from_bytes(&[0; 32]).unwrap();
+                            let signer = Local(LocalWallet::from(
+                                ethers::core::k256::ecdsa::SigningKey::from(
+                                    ethers::core::k256::SecretKey::from_be_bytes(&[0; 32]).unwrap(),
+                                ),
+                            ));
+                            let signed_checkpoint = signer.sign(MessageIdCheckpoint { message_id: messageId.into() }).await.unwrap();
+                            let serialized_checkpoint = serde_json::to_string_pretty(&signed_checkpoint)?;
+                            // write to bucket
                             dispatches += 1;
                         }
                         _ => continue,
