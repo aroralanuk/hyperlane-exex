@@ -91,11 +91,11 @@ async fn exex<Node: FullNodeComponents>(mut ctx: ExExContext<Node>) -> eyre::Res
                                 .await
                                 .map_err(|e| eyre::eyre!("Failed to write to S3: {:?}", e))?;
 
+                            dispatches += 1;
                             info!(
                                 "Added checkpoint #{} with messageId {} to S3 bucket for block #{}",
                                 dispatches, hex::encode(messageId), block.number
                             );
-                            dispatches += 1;
                         }
                         _ => continue,
                     }
