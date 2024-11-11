@@ -1,5 +1,5 @@
 use alloy_sol_types::{sol, SolCall};
-use alloy_primitives::hex;
+use alloy_primitives::{hex, keccak256, B256};
 use eyre::{eyre, Result};
 
 // sol!(
@@ -50,6 +50,10 @@ impl HyperlaneMessage {
             nonce,
             origin_domain,
         })
+    }
+
+    pub fn id(message: &[u8]) -> B256 {
+        keccak256(message)
     }
 }
 

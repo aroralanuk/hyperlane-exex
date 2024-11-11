@@ -25,25 +25,17 @@ impl<S: Signer + Send + Sync + 'static> S3Processor<S> {
 #[async_trait]
 impl<S: Signer + Send + Sync + 'static> Processor for S3Processor<S> {
     async fn submit_checkpoint(&self, checkpoint_with_id: CheckpointWithMessageId) -> Result<(), Error> {
-        println!("Processing checkpoint: {:?}", checkpoint_with_id);
-
         let signature = self.signer.sign(&checkpoint_with_id).await?;
+        let serialized_signature: [u8; 65] = signature.into();
 
-        let serialized_signature = format!(
-            "{}{}{}",
-            signature.r(),
-            signature.s(),
-            signature.v().to_u64()
-        );
-
-        let signed_checkpoint = SignedCheckpoint::new(checkpoint_with_id, signature, serialized_signature);
+        let signed_checkpoint = SignedCheckpoint::new(checkpoint_with_id, signature, format!("0x{}", hex::encode(serialized_signature)));
 
         let serialized = serde_json::to_string_pretty(&signed_checkpoint)?;
 
-        println!("Signed checkpoint: {:?}", serialized);
 
         // save locally
-
+        let file_path = format!("{}.json", checkpoint_with_id.message_id);
+        std::fs::write(file_path, serialized)?;
 
 
         Ok(())

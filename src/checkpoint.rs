@@ -1,4 +1,5 @@
 use serde::{Serialize, Deserialize};
+use serde::ser::{SerializeStruct, Serializer};
 use alloy_primitives::{keccak256, B256, Signature};
 use derive_new::new;
 
@@ -11,10 +12,10 @@ pub trait Signable: Send + Sync {
 #[derive(Copy, Clone, Eq, PartialEq, Serialize, Deserialize, Debug)]
 pub struct Checkpoint {
     /// The merkle tree hook address
-    #[serde(rename = "merkleTreeHookAddress")]
+    #[serde(rename = "merkle_tree_hook_address")]
     pub merkle_tree_hook_address: B256,
     /// The mailbox / merkle tree hook domain
-    #[serde(rename = "mailboxDomain")]
+    #[serde(rename = "mailbox_domain")]
     pub mailbox_domain: u32,
     /// The checkpointed root
     pub root: B256,
@@ -27,7 +28,7 @@ pub struct CheckpointWithMessageId {
     /// existing Hyperlane checkpoint struct
     pub checkpoint: Checkpoint,
     /// hash of message emitted from mailbox checkpoint.index
-    #[serde(rename = "messageId")]
+    #[serde(rename = "message_id")]
     pub message_id: B256,
 }
 
@@ -36,10 +37,19 @@ pub struct SignedCheckpoint {
     /// The checkpoint value
     pub value: CheckpointWithMessageId,
     /// The signature components
+    #[serde(serialize_with = "serialize_signature")]
     pub signature: Signature,
     /// The serialized signature string
-    #[serde(rename = "serializedSignature")]
+    #[serde(rename = "serialized_signature")]
     pub serialized_signature: String,
+}
+
+fn serialize_signature<S: Serializer>(signature: &Signature, serializer: S) -> Result<S::Ok, S::Error> {
+    let mut state = serializer.serialize_struct("Signature", 3)?;
+    state.serialize_field("r", &signature.r())?;
+    state.serialize_field("s", &signature.s())?;
+    state.serialize_field("v", &signature.v().y_parity_byte_non_eip155())?;
+    state.end()
 }
 
 
@@ -52,9 +62,7 @@ impl Signable for CheckpointWithMessageId {
         let domain = domain_hash(
             self.checkpoint.merkle_tree_hook_address.into(),
             self.checkpoint.mailbox_domain,
-        );
-        println!("domain: {:?}", domain);
-        
+        );        
         let mut bytes = Vec::new();
         bytes.extend_from_slice(domain.as_ref());
         bytes.extend_from_slice(self.checkpoint.root.as_ref());
