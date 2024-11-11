@@ -1,4 +1,10 @@
+use alloy_primitives::{b256, Address};
 use eyre::Result;
+use k256::ecdsa::SigningKey;
+use message::HyperlaneMessage;
+use processor::{Processor, S3Processor};
+use s3_storage::S3Storage;
+use signer::PrivateKeySigner;
 use tracing::debug;
 use std::{env, sync::Arc};
 use std::{
@@ -36,6 +42,8 @@ mod checkpoint;
 mod signer;
 mod s3_storage;
 
+use checkpoint::{Checkpoint, CheckpointWithMessageId};
+
 // mod s3_storage;
 // use s3_storage::S3Storage;
 
@@ -45,12 +53,14 @@ mod s3_storage;
 struct HyperlaneExEx<Node: FullNodeComponents> {
     /// The context of the ExEx
     ctx: ExExContext<Node>,
+    /// processor for handling checkpoints
+    processor: Arc<dyn Processor>,
 }
 
 impl<Node: FullNodeComponents> HyperlaneExEx<Node> {
     /// Create a new instance of the ExEx
-    fn new(ctx: ExExContext<Node>) -> Self {
-        Self { ctx }
+    fn new(ctx: ExExContext<Node>, processor: Arc<dyn Processor>) -> Self {
+        Self { ctx, processor }
     }
 }
 
@@ -79,21 +89,6 @@ impl<Node: FullNodeComponents + Unpin> Future for HyperlaneExEx<Node> {
         let this = self.get_mut();
 
         info!("Starting exex");
-        println!("hey!!");
-        // Get the secret key from the environment variable "PRIVATE_KEY"
-        // let secret_key_str = env::var("PRIVATE_KEY").expect("PRIVATE_KEY environment variable not set");
-
-        // let secret_key =
-        //     SecretKey::from_be_bytes(secret_key_str.as_bytes()).expect("Invalid secret key bytes");
-
-        // Create the signer
-        // let signer = Local(LocalWallet::from(SigningKey::from(secret_key)));
-
-        // let s3_instance: S3Storage = S3Storage {
-        //     bucket: "hyperlane-validator-signatures-ethereum".to_string(), // pick your bucket name here
-        //     region: Region::UsEast1,                                       // pick region
-        //     authenticated_client: Default::default(), // use your own authenticated client here
-        // };
 
         while let Some(notification) = ready!(this.ctx.notifications.try_next().poll_unpin(cx))? {
             match &notification {
@@ -107,11 +102,18 @@ impl<Node: FullNodeComponents + Unpin> Future for HyperlaneExEx<Node> {
                     let mut dispatches = 0;
 
                     for (block, _, _, event) in events {
+                        let mut message_index = 0;
+                        let mut mailbox_origin = 0;
+                        let mut message_id = b256!("0000000000000000000000000000000000000000000000000000000000000000");
                         match event {
                             MailboxEvents::Dispatch(Dispatch { sender, destination, recipient, message }) => {
-                                println!("Dispatch: sender: {}, destination: {}, recipient: {}, message: {}", sender, destination, recipient, hex::encode(message));
+                                println!("Dispatch: sender: {}, destination: {}, recipient: {}", sender, destination, recipient);
+                                message_index = HyperlaneMessage::decode(&message.clone()).unwrap().nonce;
+                                mailbox_origin = HyperlaneMessage::decode(&message).unwrap().origin_domain;
                             },
                             MailboxEvents::DispatchId(DispatchId { messageId }) => {
+
+                                message_id = messageId;
                                 // let checkpoint = MessageIdCheckpoint {
                                 //     message_id: messageId.into(),
                                 // };
@@ -135,8 +137,30 @@ impl<Node: FullNodeComponents + Unpin> Future for HyperlaneExEx<Node> {
                                     dispatches, hex::encode(messageId), block.number
                                 );
                             },
-                            _ => continue,
+                            _ => {}
                         }
+
+                        let checkpoint_with_id = CheckpointWithMessageId {
+                            message_id: message_id,
+                            checkpoint: Checkpoint {
+                                merkle_tree_hook_address: b256!("00000000000000000000000019dc38aeae620380430c200a6e990d5af5480117"),
+                                mailbox_domain: mailbox_origin,
+                                root: b256!("f4c3496c966c086cf403aa90d7a76cd2b9a6e4a231a995a46f52602132363367"),
+                                index: message_index,
+                            }
+                        };
+
+                        let processor = Arc::clone(&this.processor);
+                        println!("checking to submit checkpoint");
+                        tokio::spawn(async move {
+                            if let Err(e) = processor.submit_checkpoint(checkpoint_with_id).await {
+                                eprintln!("Failed to submit checkpoint: {:?}", e);
+                            }
+                        });
+
+
+
+
                     }
                 }
                 ExExNotification::ChainReorged { old, new } => {
@@ -223,9 +247,23 @@ fn decode_chain_into_events(
 
 fn main() -> eyre::Result<()> {
     reth::cli::Cli::parse_args().run(|builder, _| async move {
+            // Initialize the signer
+        let private_key_str = env::var("PRIVATE_KEY").expect("PRIVATE_KEY environment variable not set");
+        let private_key_bytes = hex::decode(private_key_str.trim_start_matches("0x"))?;
+        let signing_key = SigningKey::from_slice(&private_key_bytes)
+            .map_err(|_| eyre::eyre!("Invalid private key format"))?;
+        let signer = Arc::new(PrivateKeySigner::new(signing_key));
+
+        let s3_instance = Arc::new(S3Storage::new(
+            "hyperlane-validator-signatures-ethereum".to_string(), 
+            rusoto_core::Region::UsEast1,                           
+        ));
+        
+        let processor = Arc::new(S3Processor::new(signer, s3_instance));
+
         let handle = builder
             .node(EthereumNode::default())
-            .install_exex("hyperlane-exex", |ctx| async move { Ok(HyperlaneExEx::new(ctx)) })
+            .install_exex("hyperlane-exex", |ctx| async move { Ok(HyperlaneExEx::new(ctx, processor)) })
             .launch()
             .await?;
 
@@ -236,8 +274,10 @@ fn main() -> eyre::Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use alloy_consensus::TxEip1559;
-    use alloy_primitives::{Address, TxKind, FixedBytes};
+    use alloy_primitives::{address, Address, FixedBytes, TxKind};
+    use rand::rngs::OsRng;
     use tracing_test::traced_test; 
     
     use reth::revm::db::BundleState;
@@ -250,30 +290,25 @@ mod tests {
     };
     use reth_testing_utils::generators::sign_tx_with_random_key_pair;
     use std::pin::pin;
+    use alloy_primitives::hex;
 
-    use crate::Mailbox::{DispatchId, MailboxEvents};
+    use crate::Mailbox::{DispatchId, Dispatch, MailboxEvents};
+    
 
-    fn construct_tx_and_receipt<E: SolEvent>(
+    fn construct_tx_and_receipt(
         to: Address,
-        event: E,
+        events: Vec<Log>,
     ) -> eyre::Result<(TransactionSigned, Receipt)> {
         let tx = Transaction::Eip1559(TxEip1559 {
             to: TxKind::Call(to),
             ..Default::default()
         });
-
-        let log = Log::new(
-            to,
-            event.encode_topics().into_iter().map(|topic| topic.0).collect(),
-            event.encode_data().into(),
-        )
-        .ok_or_else(|| eyre::eyre!("failed to encode event"))?;
-
+    
         let receipt = Receipt {
             tx_type: TxType::Eip1559,
             success: true,
             cumulative_gas_used: 0,
-            logs: vec![log],
+            logs: events,
             ..Default::default()
         };
         Ok((sign_tx_with_random_key_pair(&mut rand::thread_rng(), tx), receipt))
@@ -284,15 +319,49 @@ mod tests {
     async fn test_exex() -> eyre::Result<()> {
         let rng = &mut generators::rng();
 
+        // Instantiate a deterministic signing key for testing
+        let signing_key = SigningKey::from_slice(&hex::decode("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80").unwrap()).unwrap();
+        let signer = Arc::new(PrivateKeySigner::new(signing_key));
+
+        // Instantiate a mock or in-memory S3Storage for testing
+        let s3_instance = Arc::new(S3Storage::new(
+            "test-bucket".to_string(),
+            rusoto_core::Region::UsEast1,
+        ));
+        let processor = Arc::new(S3Processor::new(signer, s3_instance));
+
         let (ctx, handle) = test_exex_context().await?;
-        let mut exex = pin!(super::HyperlaneExEx::new(ctx));
+        let mut exex = pin!(HyperlaneExEx::new(ctx, processor));
 
         // Generate random "from" and "to" addresses for deposit and withdrawal events
         let from_address = Address::random();
-        let to_address = Address::random();
+        let dest_mailbox = address!("d4C1905BB1D26BC93DAC913e13CaCC278CdCC80D");
+        let to_address = b256!("000000000000000000000000acEB607CdF59EB8022Cc0699eEF3eCF246d149e2");
 
-        let dispatch_event = DispatchId { messageId: FixedBytes::from_slice(&[0u8; 32]) };
-        let (dispatch_tx, dispatch_tx_receipt) = construct_tx_and_receipt(to_address, dispatch_event)?;
+        let dispatch_id_event = DispatchId { messageId: FixedBytes::from_slice(&[0u8; 32]) };
+        let dispatch_event = Dispatch { 
+            sender: from_address, 
+            destination: 42161, 
+            recipient: to_address, message: (&hex!(
+                "03000d9a51000021050000000000000000000000002552516453368e42705d791f674b312b8b87cd9e0000000a000000000000000000000000aceb607cdf59eb8022cc0699eef3ecf246d149e20000000000000000000000002ae5fdab940cccfafbc4eccd34345503912ec69d00000000000000000000000000000000000000000000000006c53613ec96a792"
+            )).into()
+        };
+        let dispatch_id_log = Log::new(
+            dest_mailbox,
+            dispatch_id_event.encode_topics().into_iter().map(|topic| topic.0).collect(),
+            dispatch_id_event.encode_data().into(),
+        ).ok_or_else(|| eyre::eyre!("failed to encode dispatch_id event"))?;
+        
+        let dispatch_log = Log::new(
+            dest_mailbox,
+            dispatch_event.encode_topics().into_iter().map(|topic| topic.0).collect(),
+            dispatch_event.encode_data().into(),
+        ).ok_or_else(|| eyre::eyre!("failed to encode dispatch event"))?;
+        
+        let (dispatch_tx, dispatch_tx_receipt) = construct_tx_and_receipt(
+            dest_mailbox,
+            vec![dispatch_id_log, dispatch_log]
+        )?;
 
         let block = Block {
             header: Header::default(),
@@ -315,6 +384,11 @@ mod tests {
         handle.send_notification_chain_committed(chain.clone()).await?;
         // Poll the ExEx once, it will process the notification that we just sent
         exex.poll_once().await?;
+
+        // tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    
+        // Await all pending tasks in the runtime
+        tokio::task::yield_now().await;
 
         Ok(())
     }

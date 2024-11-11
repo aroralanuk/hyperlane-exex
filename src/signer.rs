@@ -30,6 +30,6 @@ impl PrivateKeySigner {
 impl Signer for PrivateKeySigner {
     async fn sign(&self, signable: &dyn Signable) -> Result<Signature> {
         let hash = signable.signing_hash();
-        self.signer.sign_hash(&hash).await.map_err(|e| eyre!("{}", e))
+        self.signer.sign_message(&hash.as_ref()).await.map_err(|e| eyre!("{}", e))
     }
 }
