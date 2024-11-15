@@ -34,7 +34,7 @@ impl<S: Signer + Send + Sync + 'static> Processor for S3Processor<S> {
 
 
         // save locally
-        let file_path = format!("{}.json", checkpoint_with_id.message_id);
+        let file_path = format!("output/{}.json", checkpoint_with_id.message_id);
         std::fs::write(file_path, serialized)?;
 
 

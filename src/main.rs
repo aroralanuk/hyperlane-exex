@@ -88,14 +88,12 @@ impl<Node: FullNodeComponents + Unpin> Future for HyperlaneExEx<Node> {
 
                     let events = decode_chain_into_events(&committed_chain);
 
-                    let processor = Arc::clone(&this.processor);
-
                     for (_, _, _, event) in events {
                         match event {
                             MailboxEvents::Dispatch(Dispatch { sender, destination, recipient, message }) => {
                                 println!("Dispatch: sender: {}, destination: {}, recipient: {}", sender, destination, recipient);
 
-                                let decoded_message = match HyperlaneMessage::decode(&message) {
+                            let decoded_message = match HyperlaneMessage::decode(&message) {
                                     Ok(msg) => msg,
                                     Err(e) => {
                                         eprintln!("Failed to decode HyperlaneMessage: {:?}", e);
@@ -106,10 +104,11 @@ impl<Node: FullNodeComponents + Unpin> Future for HyperlaneExEx<Node> {
                                 let checkpoint_with_id = CheckpointWithMessageId {
                                     message_id: HyperlaneMessage::id(&message),
                                     checkpoint: Checkpoint {
-                                        merkle_tree_hook_address: b256!("00000000000000000000000019dc38aeae620380430c200a6e990d5af5480117"),
+                                        merkle_tree_hook_address: b256!("0000000000000000000000000000000000000000000000000000000000000000"),
                                         mailbox_domain: decoded_message.origin_domain,
-                                        root: b256!("0a6765ba86e0fe13c871ab982d54fb637812573c9792c4744b35a34005c70c92"),
-                                        index: decoded_message.nonce,
+                                        root: b256!("0000000000000000000000000000000000000000000000000000000000000000"),
+                                        // index: decoded_message.nonce,
+                                        index: 0,
                                     }
                                 };
 
@@ -251,7 +250,6 @@ mod tests {
     }
 
     #[tokio::test]
-    // #[traced_test]
     async fn test_exex() -> eyre::Result<()> {
         // Instantiate a deterministic signing key for testing
         let private_key_str = env::var("PRIVATE_KEY").expect("PRIVATE_KEY environment variable not set");
@@ -279,6 +277,78 @@ mod tests {
             destination: 42161, 
             recipient: to_address, message: (&hex!(
                 "03000da599000021050000000000000000000000005ed594a8f805bdd36fb1c9f1fc9a9cb94ac954c60000a4b1000000000000000000000000bdea34e4bc7316c6c397f17e6a95966579ba9e1600000000000000000000000096fbe82dc7f08641b7f5524b9874638adfd2796000000000000000000000000000000000000000000000000001301cbf18c600000000000000000000000000000000000000000000"
+            )).into()
+        };
+        
+        let dispatch_log = Log::new(
+            dest_mailbox,
+            dispatch_event.encode_topics().into_iter().map(|topic| topic.0).collect(),
+            dispatch_event.encode_data().into(),
+        ).ok_or_else(|| eyre::eyre!("failed to encode dispatch event"))?;
+        
+        let (dispatch_tx, dispatch_tx_receipt) = construct_tx_and_receipt(
+            dest_mailbox,
+            vec![dispatch_log]
+        )?;
+
+        let block = Block {
+            header: Header::default(),
+            body: BlockBody { transactions: vec![dispatch_tx], .. Default::default() },
+        }.seal_slow().seal_with_senders().ok_or_else(|| eyre::eyre!("failed to seal block"))?;
+
+        // Construct a chain
+        let chain = Chain::new(
+            vec![block.clone()],
+            ExecutionOutcome::new(
+                BundleState::default(),
+                vec![dispatch_tx_receipt].into(),
+                block.number,
+                vec![],
+            ),
+            None,
+        );
+
+        // Send a notification that the chain has been committed
+        handle.send_notification_chain_committed(chain.clone()).await?;
+        // Poll the ExEx once, it will process the notification that we just sent
+        exex.poll_once().await?;
+
+        // tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    
+        // Await all pending tasks in the runtime
+        tokio::task::yield_now().await;
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    // #[traced_test]
+    async fn test_exex_new() -> eyre::Result<()> {
+        // Instantiate a deterministic signing key for testing
+        let private_key_str = env::var("PRIVATE_KEY").expect("PRIVATE_KEY environment variable not set");
+        let signing_key = SigningKey::from_slice(&hex::decode(private_key_str.trim_start_matches("0x")).unwrap()).unwrap();
+        let signer = Arc::new(PrivateKeySigner::new(signing_key));
+
+        // Instantiate a mock or in-memory S3Storage for testing
+        let s3_instance = Arc::new(S3Storage::new(
+            "test-bucket".to_string(),
+            rusoto_core::Region::UsEast1,
+        ));
+        let processor = Arc::new(S3Processor::new(signer, s3_instance));
+
+        let (ctx, handle) = test_exex_context().await?;
+        let mut exex = pin!(HyperlaneExEx::new(ctx, processor));
+
+        // Generate random "from" and "to" addresses for deposit and withdrawal events
+        let from_address = Address::random();
+        let dest_mailbox = address!("d4C1905BB1D26BC93DAC913e13CaCC278CdCC80D");
+        let to_address = b256!("000000000000000000000000acEB607CdF59EB8022Cc0699eEF3eCF246d149e2");
+
+        let dispatch_event = Dispatch { 
+            sender: from_address, 
+            destination: 42161, 
+            recipient: to_address, message: (&hex!(
+                "03000daf1f00002105000000000000000000000000b1b4e269dd0d19d9d49f3a95bf6c2c15f13e79430000a4b10000000000000000000000008a646a71c6717bb99fc45a3e1faf094938eb82fd68656c6c6f20776f726c64"
             )).into()
         };
         
