@@ -1,10 +1,12 @@
 use alloy_primitives::{b256, Address};
+use aws_sdk_s3::config::Region;
 use eyre::Result;
 use k256::ecdsa::SigningKey;
 use message::HyperlaneMessage;
 use processor::{Processor, S3Processor};
 use s3_storage::S3Storage;
 use signer::PrivateKeySigner;
+use tokio::task::JoinHandle;
 use tracing::debug;
 use std::{env, sync::Arc};
 use std::{
@@ -34,10 +36,11 @@ sol!(Mailbox, "mailbox_abi.json");
 mod message;
 mod processor;
 mod checkpoint;
+// mod checkpoint_lite;
 mod signer;
 mod s3_storage;
 
-use checkpoint::{Checkpoint, CheckpointWithMessageId};
+use checkpoint::{Checkpoint, CheckpointWithMessageId, CheckpointWithMessageIdAndNonce};
 
 
 struct HyperlaneExEx<Node: FullNodeComponents> {
@@ -80,6 +83,8 @@ impl<Node: FullNodeComponents + Unpin> Future for HyperlaneExEx<Node> {
 
         info!("Starting exex");
 
+        let mut handles: Vec<JoinHandle<()>> = Vec::new();
+
         while let Some(notification) = ready!(this.ctx.notifications.try_next().poll_unpin(cx))? {
             match &notification {
                 ExExNotification::ChainCommitted { new } => {
@@ -91,7 +96,7 @@ impl<Node: FullNodeComponents + Unpin> Future for HyperlaneExEx<Node> {
                     for (_, _, _, event) in events {
                         match event {
                             MailboxEvents::Dispatch(Dispatch { sender, destination, recipient, message }) => {
-                                println!("Dispatch: sender: {}, destination: {}, recipient: {}", sender, destination, recipient);
+                                info!("Dispatch: sender: {}, destination: {}, recipient: {}", sender, destination, recipient);
 
                             let decoded_message = match HyperlaneMessage::decode(&message) {
                                     Ok(msg) => msg,
@@ -101,7 +106,7 @@ impl<Node: FullNodeComponents + Unpin> Future for HyperlaneExEx<Node> {
                                     }
                                 };
 
-                                let checkpoint_with_id = CheckpointWithMessageId {
+                                let checkpoint_with_id = CheckpointWithMessageIdAndNonce {
                                     message_id: HyperlaneMessage::id(&message),
                                     checkpoint: Checkpoint {
                                         merkle_tree_hook_address: b256!("0000000000000000000000000000000000000000000000000000000000000000"),
@@ -109,17 +114,19 @@ impl<Node: FullNodeComponents + Unpin> Future for HyperlaneExEx<Node> {
                                         root: b256!("0000000000000000000000000000000000000000000000000000000000000000"),
                                         // index: decoded_message.nonce,
                                         index: 0,
-                                    }
+                                    },
+                                    nonce: decoded_message.nonce,
                                 };
 
 
                                 let processor = Arc::clone(&this.processor);
-                                println!("checking to submit checkpoint");
-                                tokio::spawn(async move {
+                                info!("Checking to submit checkpoint...");
+                                let handle = tokio::spawn(async move {
                                     if let Err(e) = processor.submit_checkpoint(checkpoint_with_id).await {
-                                    eprintln!("Failed to submit checkpoint: {:?}", e);
+                                        eprintln!("Failed to submit checkpoint: {:?}", e);
                                     }
                                 });
+                                handles.push(handle);
                             },
                             _ => {}
                         }
@@ -142,6 +149,18 @@ impl<Node: FullNodeComponents + Unpin> Future for HyperlaneExEx<Node> {
                 this.ctx
                     .events
                     .send(ExExEvent::FinishedHeight(committed_chain.tip().num_hash()))?;
+            }
+        }
+
+        for handle in handles {
+            tokio::pin!(handle);
+            match handle.poll_unpin(cx) {
+                Poll::Ready(result) => {
+                    if let Err(e) = result {
+                        eprintln!("Task failed: {:?}", e);
+                    }
+                }
+                Poll::Pending => return Poll::Pending,
             }
         }
 
@@ -193,7 +212,7 @@ fn main() -> eyre::Result<()> {
 
         let s3_instance = Arc::new(S3Storage::new(
             "hyperlane-validator-signatures-ethereum".to_string(), 
-            rusoto_core::Region::UsEast1,                           
+            Region::new("us-east-2"),                           
         ));
         
         let processor = Arc::new(S3Processor::new(signer, s3_instance));
@@ -224,7 +243,7 @@ mod tests {
         Block, BlockBody, Header, Log, Receipt, Transaction, TransactionSigned, TxType,
     };
     use reth_testing_utils::generators::sign_tx_with_random_key_pair;
-    use std::pin::pin;
+    use std::{pin::pin, time::Duration};
     use alloy_primitives::hex;
 
     use crate::Mailbox::{DispatchId, Dispatch, MailboxEvents};
@@ -259,7 +278,7 @@ mod tests {
         // Instantiate a mock or in-memory S3Storage for testing
         let s3_instance = Arc::new(S3Storage::new(
             "test-bucket".to_string(),
-            rusoto_core::Region::UsEast1,
+            Region::new("us-east-2"),
         ));
         let processor = Arc::new(S3Processor::new(signer, s3_instance));
 
@@ -270,8 +289,6 @@ mod tests {
         let from_address = Address::random();
         let dest_mailbox = address!("d4C1905BB1D26BC93DAC913e13CaCC278CdCC80D");
         let to_address = b256!("000000000000000000000000acEB607CdF59EB8022Cc0699eEF3eCF246d149e2");
-
-        let dispatch_id_event = DispatchId { messageId: b256!("a8cffe04926e2dba26c4770dc627dd8f0a86fc3898b2396bb7a54a08497791d0") };
         let dispatch_event = Dispatch { 
             sender: from_address, 
             destination: 42161, 
@@ -312,8 +329,6 @@ mod tests {
         handle.send_notification_chain_committed(chain.clone()).await?;
         // Poll the ExEx once, it will process the notification that we just sent
         exex.poll_once().await?;
-
-        // tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     
         // Await all pending tasks in the runtime
         tokio::task::yield_now().await;
@@ -331,8 +346,8 @@ mod tests {
 
         // Instantiate a mock or in-memory S3Storage for testing
         let s3_instance = Arc::new(S3Storage::new(
-            "test-bucket".to_string(),
-            rusoto_core::Region::UsEast1,
+            "hyperlane-validator-signatures-exex-base".to_string(),
+            Region::new("us-east-2"),
         ));
         let processor = Arc::new(S3Processor::new(signer, s3_instance));
 
@@ -384,11 +399,11 @@ mod tests {
         handle.send_notification_chain_committed(chain.clone()).await?;
         // Poll the ExEx once, it will process the notification that we just sent
         exex.poll_once().await?;
-
-        // tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     
         // Await all pending tasks in the runtime
         tokio::task::yield_now().await;
+
+        tokio::time::sleep(Duration::from_secs(3)).await;
 
         Ok(())
     }

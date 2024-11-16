@@ -12,10 +12,8 @@ pub trait Signable: Send + Sync {
 #[derive(Copy, Clone, Eq, PartialEq, Serialize, Deserialize, Debug)]
 pub struct Checkpoint {
     /// The merkle tree hook address
-    #[serde(rename = "merkle_tree_hook_address")]
     pub merkle_tree_hook_address: B256,
     /// The mailbox / merkle tree hook domain
-    #[serde(rename = "mailbox_domain")]
     pub mailbox_domain: u32,
     /// The checkpointed root
     pub root: B256,
@@ -28,8 +26,17 @@ pub struct CheckpointWithMessageId {
     /// existing Hyperlane checkpoint struct
     pub checkpoint: Checkpoint,
     /// hash of message emitted from mailbox checkpoint.index
-    #[serde(rename = "message_id")]
     pub message_id: B256,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Serialize, Deserialize, Debug)]
+pub struct CheckpointWithMessageIdAndNonce {
+    /// existing Hyperlane checkpoint struct
+    pub checkpoint: Checkpoint,
+    /// hash of message emitted from mailbox checkpoint.index
+    pub message_id: B256,
+    /// nonce of the message
+    pub nonce: u32,
 }
 
 #[derive(Debug, Serialize, Deserialize, new)]
@@ -68,14 +75,15 @@ impl Signable for CheckpointWithMessageId {
         bytes.extend_from_slice(self.checkpoint.root.as_ref());
         bytes.extend_from_slice(&self.checkpoint.index.to_be_bytes());
         bytes.extend_from_slice(self.message_id.as_ref());
-        keccak256(bytes)
+        let hash = keccak256(bytes);
+        hash
     }
 }
 
 pub fn domain_hash(address: B256, domain: impl Into<u32>) -> B256 {
     let mut bytes = Vec::new();
     bytes.extend_from_slice(&domain.into().to_be_bytes());
-    bytes.extend_from_slice(address.as_ref());  // Using as_ref() to get &[u8]
+    bytes.extend_from_slice(address.as_ref()); 
     bytes.extend_from_slice(b"HYPERLANE");
     keccak256(bytes)
 }

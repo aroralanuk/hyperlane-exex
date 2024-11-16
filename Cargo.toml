@@ -60,10 +60,9 @@ rand = "0.8"
 async-trait = "0.1"
 derive-new = "0.7"
 
-rusoto_core = "0.48"
-rusoto_s3 = "0.48"
-rusoto_sts = "0.48"
+aws-sdk-s3 = { version = "1.61.0", features = ["rustls", "behavior-version-latest"] }
 
 # testing
 reth-exex-test-utils = { git = "https://github.com/paradigmxyz/reth" }
 reth-testing-utils = { git = "https://github.com/paradigmxyz/reth" }
+
