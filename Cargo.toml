@@ -2,39 +2,70 @@
 name = "hyperlane-exex"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.82"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-reth_node_api = { git = "https://github.com/paradigmxyz/reth", package = "reth-node-api" }
-reth_exex = { git = "https://github.com/paradigmxyz/reth", package = "reth-exex" }
-reth_node_ethereum = { git = "https://github.com/paradigmxyz/reth", package = "reth-node-ethereum" }
-reth_primitives = { git = "https://github.com/paradigmxyz/reth", package = "reth-primitives" }
-reth_provider = { git = "https://github.com/paradigmxyz/reth", package = "reth-provider" }
-reth_tracing = { git = "https://github.com/paradigmxyz/reth", package = "reth-tracing" }
-reth = { git = "https://github.com/paradigmxyz/reth", package = "reth" }
-futures = "0.3.30"
-eyre = "0.6.8"
-alloy-sol-types = { version = "0.7.2", features = ["json"] }
-primitive-types = "0.12.1"
+# reth
 
-hyperlane_ethereum = {git = "https://github.com/hyperlane-xyz/hyperlane-monorepo/", package = "hyperlane-ethereum" }
-hyperlane_core = {git = "https://github.com/hyperlane-xyz/hyperlane-monorepo/", package = "hyperlane-core" }
-# hyperlane_base = {git = "https://github.com/hyperlane-xyz/hyperlane-monorepo/", package = "hyperlane-base" }
-# secp256k1 = { version = "0.28", default-features = false, features = [
-#     "global-context",
-#     "recovery",
-# ] }
-serde_json = "1.0.116"
-ethers = { git = "https://github.com/hyperlane-xyz/ethers-rs", tag = "2024-04-25" }
+reth = { git = "https://github.com/paradigmxyz/reth" }
+reth-chainspec = { git = "https://github.com/paradigmxyz/reth" }
+reth-discv5 = { git = "https://github.com/paradigmxyz/reth" }
+reth-execution-errors = { git = "https://github.com/paradigmxyz/reth" }
+reth-execution-types = { git = "https://github.com/paradigmxyz/reth" }
+reth-exex = { git = "https://github.com/paradigmxyz/reth", features = ["serde"] }
+reth-eth-wire = { git = "https://github.com/paradigmxyz/reth" }
+reth-evm = { git = "https://github.com/paradigmxyz/reth" }
+reth-network = { git = "https://github.com/paradigmxyz/reth", features = ["test-utils"] }
+reth-network-api = { git = "https://github.com/paradigmxyz/reth" }
+reth-network-peers = { git = "https://github.com/paradigmxyz/reth" }
+reth-node-api = { git = "https://github.com/paradigmxyz/reth" }
+reth-node-ethereum = { git = "https://github.com/paradigmxyz/reth" }
+reth-primitives = { git = "https://github.com/paradigmxyz/reth" }
+reth-provider = { git = "https://github.com/paradigmxyz/reth" }
+reth-revm = { git = "https://github.com/paradigmxyz/reth" }
+reth-transaction-pool = { git = "https://github.com/paradigmxyz/reth" }
+reth-tracing = { git = "https://github.com/paradigmxyz/reth" }
+reth-optimism-node = { git = "https://github.com/paradigmxyz/reth", features = ["optimism"] }
+reth-optimism-cli = { git = "https://github.com/paradigmxyz/reth", features = ["optimism"] }
+# alloy
+alloy-eips = { git = "https://github.com/alloy-rs/alloy" }
+alloy-consensus = "0.6.4"
+alloy-primitives = { version = "0.8.10", default-features = false }
+alloy-rlp = "0.3.4"
+alloy-rpc-types = { git = "https://github.com/alloy-rs/alloy", features = [
+    "eth",
+], default-features = false }
+alloy-signer = { git = "https://github.com/alloy-rs/alloy", default-features = false }
+alloy-signer-local = { git = "https://github.com/alloy-rs/alloy", default-features = false }
+alloy-sol-types  = { version = "0.8", features = ["json"] }
+
+
+# async
+futures = "0.3"
+futures-util = "0.3"
+tokio = { version = "1.0", features = ["full"] }
+tokio-stream = "0.1"
+tokio-tungstenite = { version = "0.23", features = ["native-tls"] }
+
+# serde
+serde = "1"
+serde_json = "1"
 hex = "0.4.3"
-rusoto_s3 = "*"
-rusoto_core = "0.48.0"
+
+# misc
+k256 = "0.13"
+tracing = "0.1"
+tracing-test = "0.2"
+eyre = "0.6"
+rand = "0.8"
 async-trait = "0.1"
-rusoto_sts = "*"
-serde = "1.0.200"
-derive-new = "0.5"
-tokio = { version = "1", features = ["parking_lot"] }
+derive-new = "0.7"
 
+aws-sdk-s3 = { version = "1.61.0", features = ["rustls", "behavior-version-latest"] }
 
+# testing
+reth-exex-test-utils = { git = "https://github.com/paradigmxyz/reth" }
+reth-testing-utils = { git = "https://github.com/paradigmxyz/reth" }
 
