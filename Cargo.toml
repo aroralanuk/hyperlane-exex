@@ -8,6 +8,7 @@ rust-version = "1.82"
 
 [dependencies]
 # reth
+
 reth = { git = "https://github.com/paradigmxyz/reth" }
 reth-chainspec = { git = "https://github.com/paradigmxyz/reth" }
 reth-discv5 = { git = "https://github.com/paradigmxyz/reth" }
@@ -26,18 +27,20 @@ reth-provider = { git = "https://github.com/paradigmxyz/reth" }
 reth-revm = { git = "https://github.com/paradigmxyz/reth" }
 reth-transaction-pool = { git = "https://github.com/paradigmxyz/reth" }
 reth-tracing = { git = "https://github.com/paradigmxyz/reth" }
-
+reth-optimism-node = { git = "https://github.com/paradigmxyz/reth", features = ["optimism"] }
+reth-optimism-cli = { git = "https://github.com/paradigmxyz/reth", features = ["optimism"] }
 # alloy
-alloy-eips = { version = "0.5.4", default-features = false }
-alloy-consensus = { version = "0.5.4", default-features = false }
-alloy-primitives = { version = "0.8.9", default-features = false }
+alloy-eips = { git = "https://github.com/alloy-rs/alloy" }
+alloy-consensus = "0.6.4"
+alloy-primitives = { version = "0.8.10", default-features = false }
 alloy-rlp = "0.3.4"
-alloy-rpc-types = { version = "0.5.4", features = [
+alloy-rpc-types = { git = "https://github.com/alloy-rs/alloy", features = [
     "eth",
 ], default-features = false }
-alloy-signer = { version = "0.5.4", default-features = false }
-alloy-signer-local = { version = "0.5.4", default-features = false }
+alloy-signer = { git = "https://github.com/alloy-rs/alloy", default-features = false }
+alloy-signer-local = { git = "https://github.com/alloy-rs/alloy", default-features = false }
 alloy-sol-types  = { version = "0.8", features = ["json"] }
+
 
 # async
 futures = "0.3"

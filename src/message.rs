@@ -1,13 +1,5 @@
-use alloy_sol_types::{sol, SolCall};
-use alloy_primitives::{hex, keccak256, B256};
+use alloy_primitives::{keccak256, B256};
 use eyre::{eyre, Result};
-
-// sol!(
-//     #[derive(Debug, PartialEq, Eq)]
-//     function decodeMessage(bytes memory encodedMessage) external view returns (uint8 version, uint32 nonce, uint32 originDomain, bytes32 sender, uint32 destinationDomain, bytes32 recipient);
-// );
-
-use alloy_primitives::Address;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -60,6 +52,7 @@ impl HyperlaneMessage {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloy_primitives::hex;
 
     #[test]
     fn test_decode_message() {

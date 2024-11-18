@@ -30,7 +30,9 @@ impl PrivateKeySigner {
 impl Signer for PrivateKeySigner {
     async fn sign(&self, signable: &dyn Signable) -> Result<Signature> {
         let hash = signable.signing_hash();
-        self.signer.sign_message(&hash.as_ref()).await.map_err(|e| eyre!("{}", e))
+        let primitive_signature = self.signer.sign_message(&hash.as_ref()).await.map_err(|e| eyre!("{}", e))?;
+        Signature::from_signature_and_parity(primitive_signature.to_k256().unwrap(), primitive_signature.v())
+            .map_err(|e| eyre!("{}", e))
     }
 }
 
@@ -40,7 +42,7 @@ mod tests {
 
     use std::env;
     use alloy_primitives::b256;
-    use crate::checkpoint::{Checkpoint, CheckpointWithMessageId, SignedCheckpoint};
+    use crate::checkpoint::{Checkpoint, CheckpointWithMessageId};
 
     #[tokio::test]
     async fn test_signer() {

@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use crate::{checkpoint::{CheckpointWithMessageIdAndNonce, SignedCheckpoint}, signer::Signer};
 use eyre::Error;
-use crate::checkpoint::{CheckpointWithMessageId, Checkpoint};
+use crate::checkpoint::CheckpointWithMessageId;
 use std::sync::Arc;
 use crate::s3_storage::S3Storage;
 

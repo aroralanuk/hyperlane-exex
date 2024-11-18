@@ -1,46 +1,39 @@
-use alloy_primitives::{b256, Address};
+use alloy_primitives::b256;
 use aws_sdk_s3::config::Region;
-use eyre::Result;
 use k256::ecdsa::SigningKey;
 use message::HyperlaneMessage;
 use processor::{Processor, S3Processor};
 use s3_storage::S3Storage;
 use signer::PrivateKeySigner;
 use tokio::task::JoinHandle;
-use tracing::debug;
 use std::{env, sync::Arc};
 use std::{
     future::Future,
     pin::Pin,
     task::{ready, Context, Poll},
 };
-// use alloy_primitives::{address, Address};
 use alloy_sol_types::{sol, SolEventInterface};
 use futures_util::{FutureExt, TryStreamExt};
-// use ethers::{
-//     core::k256::{ecdsa::SigningKey, SecretKey},
-//     signers::LocalWallet,
-// };
+use reth_optimism_cli::Cli;
 use reth_exex::{ExExContext, ExExEvent, ExExNotification};
 use reth_node_api::FullNodeComponents;
-use reth_node_ethereum::EthereumNode;
+use reth_optimism_node::OpNode;
 use reth_primitives::{Log, SealedBlockWithSenders, TransactionSigned};
 use reth_provider::Chain;
 use reth_tracing::tracing::info;
 
 use Mailbox::MailboxEvents;
 
-use crate::Mailbox::{DispatchId, Dispatch};
+use crate::Mailbox::Dispatch;
 sol!(Mailbox, "mailbox_abi.json");
 
 mod message;
 mod processor;
 mod checkpoint;
-// mod checkpoint_lite;
 mod signer;
 mod s3_storage;
 
-use checkpoint::{Checkpoint, CheckpointWithMessageId, CheckpointWithMessageIdAndNonce};
+use checkpoint::{Checkpoint, CheckpointWithMessageIdAndNonce};
 
 
 struct HyperlaneExEx<Node: FullNodeComponents> {
@@ -202,7 +195,7 @@ fn decode_chain_into_events(
 }
 
 fn main() -> eyre::Result<()> {
-    reth::cli::Cli::parse_args().run(|builder, _| async move {
+    Cli::parse_args().run(|builder, _| async move {
             // Initialize the signer
         let private_key_str = env::var("PRIVATE_KEY").expect("PRIVATE_KEY environment variable not set");
         let private_key_bytes = hex::decode(private_key_str.trim_start_matches("0x"))?;
@@ -218,7 +211,7 @@ fn main() -> eyre::Result<()> {
         let processor = Arc::new(S3Processor::new(signer, s3_instance));
 
         let handle = builder
-            .node(EthereumNode::default())
+            .node(OpNode::default())
             .install_exex("hyperlane-exex", |ctx| async move { Ok(HyperlaneExEx::new(ctx, processor)) })
             .launch()
             .await?;
@@ -231,22 +224,21 @@ fn main() -> eyre::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloy_consensus::TxEip1559;
-    use alloy_primitives::{address, Address, FixedBytes, TxKind};
+    use alloy_consensus::{TxEip1559, Header};
+    use alloy_primitives::{address, Address, TxKind};
     
     use reth::revm::db::BundleState;
     use reth_execution_types::{Chain, ExecutionOutcome};
     use reth_exex_test_utils::{test_exex_context, PollOnce};
     use alloy_sol_types::SolEvent;
-    use reth_testing_utils::generators::{self, random_block, random_receipt, BlockParams};
     use reth_primitives::{
-        Block, BlockBody, Header, Log, Receipt, Transaction, TransactionSigned, TxType,
+        Block, BlockBody, Log, Receipt, Transaction, TransactionSigned, TxType,
     };
     use reth_testing_utils::generators::sign_tx_with_random_key_pair;
     use std::{pin::pin, time::Duration};
     use alloy_primitives::hex;
 
-    use crate::Mailbox::{DispatchId, Dispatch, MailboxEvents};
+    use crate::Mailbox::Dispatch;
     
 
     fn construct_tx_and_receipt(
