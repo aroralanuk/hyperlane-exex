@@ -1,5 +1,5 @@
 [package]
-name = "hyperlane-exex"
+name = "hyperlane-reth"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.82"
@@ -9,7 +9,7 @@ rust-version = "1.82"
 [dependencies]
 # reth
 
-op-reth = { git = "https://github.com/paradigmxyz/reth" }
+reth = { git = "https://github.com/paradigmxyz/reth" }
 reth-execution-types = { git = "https://github.com/paradigmxyz/reth" }
 reth-exex = { git = "https://github.com/paradigmxyz/reth", features = ["serde"] }
 reth-evm = { git = "https://github.com/paradigmxyz/reth" }
@@ -18,8 +18,8 @@ reth-node-ethereum = { git = "https://github.com/paradigmxyz/reth" }
 reth-primitives = { git = "https://github.com/paradigmxyz/reth" }
 reth-provider = { git = "https://github.com/paradigmxyz/reth" }
 reth-tracing = { git = "https://github.com/paradigmxyz/reth" }
-reth-optimism-node = { git = "https://github.com/paradigmxyz/reth", features = ["optimism"] }
-reth-optimism-cli = { git = "https://github.com/paradigmxyz/reth", features = ["optimism"] }
+reth-optimism-node = { git = "https://github.com/paradigmxyz/reth", features = ["optimism"]}
+reth-optimism-cli = { git = "https://github.com/paradigmxyz/reth", features = ["optimism"]}
 # alloy
 alloy-eips = { git = "https://github.com/alloy-rs/alloy" }
 alloy-consensus = "0.6.4"
@@ -31,6 +31,7 @@ alloy-rpc-types = { git = "https://github.com/alloy-rs/alloy", features = [
 alloy-signer = { git = "https://github.com/alloy-rs/alloy", default-features = false }
 alloy-signer-local = { git = "https://github.com/alloy-rs/alloy", default-features = false }
 alloy-sol-types  = { version = "0.8", features = ["json"] }
+
 
 
 # async
@@ -60,3 +61,9 @@ aws-sdk-s3 = { version = "1.61.0", features = ["rustls", "behavior-version-lates
 reth-exex-test-utils = { git = "https://github.com/paradigmxyz/reth" }
 reth-testing-utils = { git = "https://github.com/paradigmxyz/reth" }
 
+
+
+
+[[bin]]
+name = "hyperlane-reth"
+path = "src/main.rs"
