@@ -7,7 +7,7 @@ services:
       dockerfile: Dockerfile
     container_name: hyperlane-reth
     restart: always
-    entrypoint: op-reth
+    entrypoint: hyperlane-reth
     command: >
       node
       --full
