@@ -1,0 +1,80 @@
+version: "1.0"
+
+services:
+  execution_client_new:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hyperlane-reth
+    restart: always
+    entrypoint: op-reth
+    command: >
+      node
+      --full
+      --chain base
+      --datadir /data
+      --rollup.sequencer-http https://mainnet-sequencer.base.org
+      --rollup.disable-tx-pool-gossip
+      --port 30305
+      --discovery.port 30305
+      --enable-discv5-discovery
+      --discovery.v5.addr 0.0.0.0
+      --discovery.v5.port 30306
+      --discovery.v5.port.ipv6 30306
+      --http
+      --http.addr 0.0.0.0
+      --http.port 8547
+      --http.corsdomain "*"
+      --http.api all
+      --ws
+      --ws.addr 0.0.0.0
+      --ws.port 8548
+      --ws.origins "*"
+      --ws.api all
+      --authrpc.jwtsecret /jwt/jwt.hex
+      --authrpc.addr 0.0.0.0
+      --authrpc.port 9551
+      --metrics 0.0.0.0:9001
+    ports:
+      - 8549:8547/tcp
+      - 8550:8548/tcp
+      - 30307:30305/tcp
+      - 30307:30305/udp
+      - 30308:30306/tcp
+      - 30308:30306/udp
+      - 9002:9001/tcp
+      - 9552:9551/tcp
+    volumes:
+      - /mnt/data/reth_data:/data
+      - /mnt/data/jwt:/jwt:ro
+    networks:
+      - app-network
+
+  rollup_client:
+    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:latest
+    container_name: base_rollup
+    restart: always
+    command: >
+      op-node
+      --network=base-mainnet
+      --syncmode=execution-layer
+      --l1=wss://eth.merkle.io
+      --l1.trustrpc
+      --l1.beacon=https://ethereum-beacon-api.publicnode.com
+      --l2=http://execution_client:9551
+      --l2.jwt-secret=/jwt/jwt.hex
+      --p2p.listen.tcp=9004
+      --p2p.listen.udp=9004
+    ports:
+      - 9004:9004/tcp
+      - 9004:9004/udp
+    volumes:
+      - /mnt/data/jwt:/jwt:ro
+    depends_on:
+      - execution_client_new
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
