@@ -1,7 +1,9 @@
 FROM rust:latest AS builder
 
 # Install necessary dependencies
-RUN apt update && apt install -y cmake clang openssl
+RUN apt update && \
+    apt install -y cmake clang openssl make && \
+    rm -rf /var/lib/apt/lists/*
 
 # Set the working directory
 WORKDIR /usr/src/hyperlane-reth
