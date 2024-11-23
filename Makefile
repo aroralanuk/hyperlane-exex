@@ -28,7 +28,10 @@ install-exex: ## Build and install the op-reth binary under `~/.cargo/bin`.
 
 .PHONY: build-exex
 build-exex: ## Build the op-reth binary into `target` directory.
-	cargo build --bin hyperlane-reth --profile "$(PROFILE)" --jobs $(CARGO_BUILD_JOBS)
+	cargo build --bin hyperlane-reth \
+		--profile maxperf \
+		--features jemalloc,asm-keccak \
+		--jobs $(CARGO_BUILD_JOBS)
 
 .PHONY: lint
 lint:
