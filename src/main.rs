@@ -14,13 +14,14 @@ use std::{
 };
 use alloy_sol_types::{sol, SolEventInterface};
 use futures_util::{FutureExt, TryStreamExt};
-use reth_optimism_cli::Cli;
+use reth_optimism_cli::{Cli, chainspec::OpChainSpecParser};
 use reth_exex::{ExExContext, ExExEvent, ExExNotification};
 use reth_node_api::FullNodeComponents;
-use reth_optimism_node::OpNode;
+use reth_optimism_node::{args::RollupArgs, OpNode};
 use reth_primitives::{Log, SealedBlockWithSenders, TransactionSigned};
 use reth_provider::Chain;
 use reth_tracing::tracing::info;
+use clap::Parser;
 
 use Mailbox::MailboxEvents;
 
@@ -195,7 +196,7 @@ fn decode_chain_into_events(
 }
 
 fn main() -> eyre::Result<()> {
-    Cli::parse_args().run(|builder, _| async move {
+    Cli::<OpChainSpecParser, RollupArgs>::parse().run(|builder, _| async move {
             // Initialize the signer
         let private_key_str = env::var("PRIVATE_KEY").expect("PRIVATE_KEY environment variable not set");
         let private_key_bytes = hex::decode(private_key_str.trim_start_matches("0x"))?;

@@ -10,6 +10,7 @@ services:
     entrypoint: hyperlane-reth
     command: >
       node
+      -vvv
       --full
       --chain base
       --datadir /data

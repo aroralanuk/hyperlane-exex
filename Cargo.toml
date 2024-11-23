@@ -33,7 +33,7 @@ alloy-signer-local = { git = "https://github.com/alloy-rs/alloy", default-featur
 alloy-sol-types  = { version = "0.8", features = ["json"] }
 
 
-
+clap = { version = "4", features = ["derive", "env"] }
 # async
 futures = "0.3"
 futures-util = "0.3"

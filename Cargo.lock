@@ -3694,6 +3694,7 @@ dependencies = [
  "alloy-sol-types",
  "async-trait",
  "aws-sdk-s3",
+ "clap",
  "derive-new",
  "eyre",
  "futures",
