@@ -86,7 +86,7 @@ impl<Node: FullNodeComponents + Unpin> Future for HyperlaneExEx<Node> {
                     info!(committed_chain = ?new.range(), "Received commit");
 
                     let events = decode_chain_into_events(&committed_chain);
-
+                
                     for (_, _, _, event) in events {
                         match event {
                             MailboxEvents::Dispatch(Dispatch { sender, destination, recipient, message }) => {
@@ -189,6 +189,7 @@ fn decode_chain_into_events(
         .flat_map(|(block, tx, receipt)| receipt.logs.iter().map(move |log| (block, tx, log)))
         // Decode and filter bridge events
         .filter_map(|(block, tx, log)| {
+            info!("Decoding log: {:?}, block number: {}, tx to: {}", log, block.number, tx.transaction.to().unwrap());
             MailboxEvents::decode_raw_log(log.topics(), &log.data.data, true)
                 .ok()
                 .map(|event| (block, tx, log, event))

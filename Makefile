@@ -13,18 +13,22 @@ endif
 # Cargo profile for builds. Default is for local builds, CI uses an override.
 PROFILE ?= release
 
+# Determine the number of parallel jobs
+CARGO_BUILD_JOBS := $(shell nproc)
+
 ##@ Build
 
 .PHONY: install-exex
 install-exex: ## Build and install the op-reth binary under `~/.cargo/bin`.
 	cargo install --path . --bin hyperlane-reth --force --locked \
 		--profile "$(PROFILE)" \
+		--jobs $(CARGO_BUILD_JOBS) \
 		$(CARGO_INSTALL_EXTRA_FLAGS)
 
 
 .PHONY: build-exex
 build-exex: ## Build the op-reth binary into `target` directory.
-	cargo build --bin hyperlane-reth --profile "$(PROFILE)"
+	cargo build --bin hyperlane-reth --profile "$(PROFILE)" --jobs $(CARGO_BUILD_JOBS)
 
 .PHONY: lint
 lint:

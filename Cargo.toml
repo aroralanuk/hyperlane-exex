@@ -14,7 +14,6 @@ reth-execution-types = { git = "https://github.com/paradigmxyz/reth" }
 reth-exex = { git = "https://github.com/paradigmxyz/reth", features = ["serde"] }
 reth-evm = { git = "https://github.com/paradigmxyz/reth" }
 reth-node-api = { git = "https://github.com/paradigmxyz/reth" }
-reth-node-ethereum = { git = "https://github.com/paradigmxyz/reth" }
 reth-primitives = { git = "https://github.com/paradigmxyz/reth" }
 reth-provider = { git = "https://github.com/paradigmxyz/reth" }
 reth-tracing = { git = "https://github.com/paradigmxyz/reth" }
@@ -25,9 +24,9 @@ alloy-eips = { git = "https://github.com/alloy-rs/alloy" }
 alloy-consensus = "0.6.4"
 alloy-primitives = { version = "0.8.10", default-features = false }
 alloy-rlp = "0.3.4"
-alloy-rpc-types = { git = "https://github.com/alloy-rs/alloy", features = [
-    "eth",
-], default-features = false }
+# alloy-rpc-types = { git = "https://github.com/alloy-rs/alloy", features = [
+#     "eth",
+# ], default-features = false }
 alloy-signer = { git = "https://github.com/alloy-rs/alloy", default-features = false }
 alloy-signer-local = { git = "https://github.com/alloy-rs/alloy", default-features = false }
 alloy-sol-types  = { version = "0.8", features = ["json"] }
@@ -49,7 +48,6 @@ hex = "0.4.3"
 # misc
 k256 = "0.13"
 tracing = "0.1"
-tracing-test = "0.2"
 eyre = "0.6"
 rand = "0.8"
 async-trait = "0.1"

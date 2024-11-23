@@ -1,4 +1,4 @@
-FROM rust:latest AS builder
+FROM rust:1.82-slim AS builder
 ENV CARGO_HOME=/usr/local/cargo
 
 # Install necessary dependencies
@@ -7,6 +7,8 @@ RUN apt update && \
     rm -rf /var/lib/apt/lists/*
 
 ENV PATH="$CARGO_HOME/bin:${PATH}"
+ENV CARGO_INCREMENTAL=1
+# ENV CARGO_BUILD_JOBS=$(nproc)
 
 # Set the working directory
 WORKDIR /usr/src/hyperlane-reth
