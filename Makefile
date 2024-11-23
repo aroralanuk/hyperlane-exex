@@ -21,7 +21,7 @@ CARGO_BUILD_JOBS := $(shell nproc)
 .PHONY: install-exex
 install-exex: ## Build and install the op-reth binary under `~/.cargo/bin`.
 	cargo install --path . --bin hyperlane-reth --force --locked \
-		--profile "$(PROFILE)" \
+		--profile "maxperf" \
 		--jobs $(CARGO_BUILD_JOBS) \
 		$(CARGO_INSTALL_EXTRA_FLAGS)
 
