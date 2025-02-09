@@ -1,9 +1,9 @@
-use async_trait::async_trait;
-use alloy_signer::{Signer as AlloySigner, Signature};
-use k256::ecdsa::SigningKey;
-use alloy_signer_local::LocalSigner;
-use eyre::{Result, eyre};
 use crate::checkpoint::Signable;
+use alloy_signer::{Signature, Signer as AlloySigner};
+use alloy_signer_local::LocalSigner;
+use async_trait::async_trait;
+use eyre::{eyre, Result};
+use k256::ecdsa::SigningKey;
 use std::sync::Arc;
 
 #[async_trait]
@@ -30,9 +30,16 @@ impl PrivateKeySigner {
 impl Signer for PrivateKeySigner {
     async fn sign(&self, signable: &dyn Signable) -> Result<Signature> {
         let hash = signable.signing_hash();
-        let primitive_signature = self.signer.sign_message(&hash.as_ref()).await.map_err(|e| eyre!("{}", e))?;
-        Signature::from_signature_and_parity(primitive_signature.to_k256().unwrap(), primitive_signature.v())
-            .map_err(|e| eyre!("{}", e))
+        let primitive_signature = self
+            .signer
+            .sign_message(&hash.as_ref())
+            .await
+            .map_err(|e| eyre!("{}", e))?;
+        Signature::from_signature_and_parity(
+            primitive_signature.to_k256().unwrap(),
+            primitive_signature.v(),
+        )
+        .map_err(|e| eyre!("{}", e))
     }
 }
 
@@ -40,19 +47,24 @@ impl Signer for PrivateKeySigner {
 mod tests {
     use super::*;
 
-    use std::env;
-    use alloy_primitives::b256;
     use crate::checkpoint::{Checkpoint, CheckpointWithMessageId};
+    use alloy_primitives::b256;
+    use std::env;
 
     #[tokio::test]
     async fn test_signer() {
-        let private_key_str = env::var("PRIVATE_KEY").expect("PRIVATE_KEY environment variable not set");
-        let signing_key = SigningKey::from_slice(&hex::decode(private_key_str.trim_start_matches("0x")).unwrap()).unwrap();
+        let private_key_str =
+            env::var("PRIVATE_KEY").expect("PRIVATE_KEY environment variable not set");
+        let signing_key =
+            SigningKey::from_slice(&hex::decode(private_key_str.trim_start_matches("0x")).unwrap())
+                .unwrap();
         let signer = Arc::new(PrivateKeySigner::new(signing_key));
 
         let checkpoint = CheckpointWithMessageId {
             checkpoint: Checkpoint {
-                merkle_tree_hook_address: b256!("00000000000000000000000019dc38aeae620380430c200a6e990d5af5480117"),
+                merkle_tree_hook_address: b256!(
+                    "00000000000000000000000019dc38aeae620380430c200a6e990d5af5480117"
+                ),
                 mailbox_domain: 8453,
                 root: b256!("0a6765ba86e0fe13c871ab982d54fb637812573c9792c4744b35a34005c70c92"),
                 index: 894361,

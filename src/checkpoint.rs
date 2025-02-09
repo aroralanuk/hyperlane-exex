@@ -1,7 +1,7 @@
-use serde::{Serialize, Deserialize};
-use serde::ser::{SerializeStruct, Serializer};
-use alloy_primitives::{keccak256, B256, Signature};
+use alloy_primitives::{keccak256, Signature, B256};
 use derive_new::new;
+use serde::ser::{SerializeStruct, Serializer};
+use serde::{Deserialize, Serialize};
 
 pub trait Signable: Send + Sync {
     /// Computes and returns the signing hash of the object.
@@ -51,15 +51,16 @@ pub struct SignedCheckpoint {
     pub serialized_signature: String,
 }
 
-fn serialize_signature<S: Serializer>(signature: &Signature, serializer: S) -> Result<S::Ok, S::Error> {
+fn serialize_signature<S: Serializer>(
+    signature: &Signature,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
     let mut state = serializer.serialize_struct("Signature", 3)?;
     state.serialize_field("r", &signature.r())?;
     state.serialize_field("s", &signature.s())?;
     state.serialize_field("v", &signature.v().y_parity_byte_non_eip155())?;
     state.end()
 }
-
-
 
 impl Signable for CheckpointWithMessageId {
     /// Computes the EIP-191 compliant signing hash for the checkpoint.
@@ -69,7 +70,7 @@ impl Signable for CheckpointWithMessageId {
         let domain = domain_hash(
             self.checkpoint.merkle_tree_hook_address.into(),
             self.checkpoint.mailbox_domain,
-        );        
+        );
         let mut bytes = Vec::new();
         bytes.extend_from_slice(domain.as_ref());
         bytes.extend_from_slice(self.checkpoint.root.as_ref());
@@ -83,11 +84,10 @@ impl Signable for CheckpointWithMessageId {
 pub fn domain_hash(address: B256, domain: impl Into<u32>) -> B256 {
     let mut bytes = Vec::new();
     bytes.extend_from_slice(&domain.into().to_be_bytes());
-    bytes.extend_from_slice(address.as_ref()); 
+    bytes.extend_from_slice(address.as_ref());
     bytes.extend_from_slice(b"HYPERLANE");
     keccak256(bytes)
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -99,7 +99,9 @@ mod tests {
     fn test_checkpoint_signing_hash() {
         // from https://explorer.hyperlane.xyz/message/0x0f3c2a91d6aa7c2c35077588db4882ad65e3e315520a295d6750cf0e3e9b8764
         let checkpoint = Checkpoint {
-            merkle_tree_hook_address: b256!("00000000000000000000000019dc38aeae620380430c200a6e990d5af5480117"),
+            merkle_tree_hook_address: b256!(
+                "00000000000000000000000019dc38aeae620380430c200a6e990d5af5480117"
+            ),
             mailbox_domain: 8453,
             root: b256!("f4c3496c966c086cf403aa90d7a76cd2b9a6e4a231a995a46f52602132363367"),
             index: 891473,
@@ -111,6 +113,9 @@ mod tests {
         };
 
         let hash = checkpoint_with_message.signing_hash();
-        assert_eq!(hash, b256!("a846779094ecec23118e978c7ef817eafb8df8b305b4fe4adbe07e22fd5f97ea"));
+        assert_eq!(
+            hash,
+            b256!("a846779094ecec23118e978c7ef817eafb8df8b305b4fe4adbe07e22fd5f97ea")
+        );
     }
 }
