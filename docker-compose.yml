@@ -1,15 +1,16 @@
 version: "1.0"
 
 services:
-  execution_client_new:
+  execution_client:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: hyperlane-reth
+    container_name: hyperlane_reth
     restart: always
     entrypoint: hyperlane-reth
     command: >
       node
+      -vvv
       --full
       --chain base
       --datadir /data
@@ -35,15 +36,17 @@ services:
       --authrpc.addr 0.0.0.0
       --authrpc.port 9551
       --metrics 0.0.0.0:9001
+    env_file:
+      - .env
     ports:
-      - 8549:8547/tcp
-      - 8550:8548/tcp
-      - 30307:30305/tcp
-      - 30307:30305/udp
-      - 30308:30306/tcp
-      - 30308:30306/udp
-      - 9002:9001/tcp
-      - 9552:9551/tcp
+      - 8547:8547/tcp
+      - 8548:8548/tcp
+      - 30305:30305/tcp
+      - 30305:30305/udp
+      - 30306:30306/tcp
+      - 30306:30306/udp
+      - 9001:9001/tcp
+      - 9551:9551/tcp
     volumes:
       - /mnt/data/reth_data:/data
       - /mnt/data/jwt:/jwt:ro
@@ -71,7 +74,7 @@ services:
     volumes:
       - /mnt/data/jwt:/jwt:ro
     depends_on:
-      - execution_client_new
+      - execution_client
     networks:
       - app-network
 

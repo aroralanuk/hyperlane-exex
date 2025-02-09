@@ -21,7 +21,11 @@ impl HyperlaneMessage {
     pub fn decode(message: &[u8]) -> Result<Self> {
         // Ensure the message is long enough to contain all fixed fields
         if message.len() < Self::BODY_OFFSET {
-            return Err(eyre!("Message too short: expected at least {} bytes, got {}", Self::BODY_OFFSET, message.len()));
+            return Err(eyre!(
+                "Message too short: expected at least {} bytes, got {}",
+                Self::BODY_OFFSET,
+                message.len()
+            ));
         }
 
         // Extract and parse each field using the defined offsets
